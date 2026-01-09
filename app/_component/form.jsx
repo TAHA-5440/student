@@ -1,3 +1,4 @@
+// Form editor with field editing, preview, and submission
 "use client";
 import React, { useState, useEffect } from "react";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { supabase } from "../lib/supabase";
 
-// --- SUB-COMPONENT FOR EDITING FIELD DETAILS ---
+// Sub-component for editing field label and placeholder
 const EditFieldController = ({ field, onUpdate }) => {
   const [label, setLabel] = useState(
     field.label || field.formLabel || field.form_label || ""
@@ -86,7 +87,7 @@ const EditFieldController = ({ field, onUpdate }) => {
   );
 };
 
-// --- MAIN COMPONENT ---
+// Main form editor component
 const Formpage = ({ formData }) => {
   const [fields, setFields] = useState([]);
   const [isPreview, setIsPreview] = useState(false);
@@ -95,11 +96,19 @@ const Formpage = ({ formData }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [formValues, setFormValues] = useState({});
 
+  /**
+   * Parses AI-generated JSON response and extracts form structure
+   * Handles both string and object responses from the AI model
+   * Supports multiple naming conventions (camelCase and snake_case)
+   *
+   * @returns {Object} Parsed form with title, subheading, and fields array
+   */
   const getAiData = () => {
     const raw = formData?.["AI response"];
     if (!raw) return { title: "Loading...", subheading: "", fields: [] };
 
     let parsed = raw;
+    // Parse JSON if it's returned as a string
     if (typeof raw === "string") {
       try {
         const cleanJson = raw.replace(/```json|```/g, "").trim();
@@ -113,6 +122,7 @@ const Formpage = ({ formData }) => {
       }
     }
 
+    // Extract form metadata using multiple naming conventions
     return {
       title: parsed.formTitle || parsed.form_title || "Untitled Form",
       subheading:
@@ -123,28 +133,53 @@ const Formpage = ({ formData }) => {
     };
   };
 
+  // Parse AI data into usable form structure
   const ai = getAiData();
 
+  // Initialize fields when form data changes
   useEffect(() => {
     if (ai.fields && ai.fields.length > 0) {
       setFields(ai.fields);
     }
   }, [formData]);
 
+  /**
+   * Removes a field from the form by index
+   * @param {number} indexToDelete - Index of field to remove
+   */
   const deleteField = (indexToDelete) => {
     setFields(fields.filter((_, index) => index !== indexToDelete));
   };
 
+  /**
+   * Updates a specific field's properties
+   * Called when user edits field label or placeholder
+   *
+   * @param {number} index - Field index to update
+   * @param {Object} updatedData - New field data
+   */
   const handleFinalUpdate = (index, updatedData) => {
     const updatedFields = [...fields];
     updatedFields[index] = { ...updatedFields[index], ...updatedData };
     setFields(updatedFields);
   };
 
+  /**
+   * Updates form field values as user types
+   * Maintains state of all user inputs for form submission
+   *
+   * @param {string} label - Field label
+   * @param {string} value - User input value
+   */
   const handleInputChange = (label, value) => {
     setFormValues((prev) => ({ ...prev, [label]: value }));
   };
 
+  /**
+   * Persists form structure changes to Supabase database
+   * Called when user clicks "Save Changes" button
+   * Updates the AI response JSON with modified fields
+   */
   const handleSaveFormStructure = async () => {
     if (!formData?.id) return alert("No form ID found.");
     setIsSaving(true);
@@ -168,11 +203,18 @@ const Formpage = ({ formData }) => {
     }
   };
 
+  /**
+   * Submits form responses to database
+   * Stores user input values with form metadata
+   * Only available in preview mode
+   *
+   * @param {Event} e - Form submit event
+   */
   const handleSubmitResponse = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // NEW: Include title and subheading in the submission data
+      // Prepare submission data with form title and description
       const submissionData = {
         form_title: ai.title,
         form_subheading: ai.subheading,
@@ -195,6 +237,10 @@ const Formpage = ({ formData }) => {
     }
   };
 
+  /**
+   * Copies current form URL to clipboard for sharing
+   * Provides visual feedback (checkmark) when copied
+   */
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
@@ -203,14 +249,20 @@ const Formpage = ({ formData }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* ===== HEADER / TOOLBAR ===== */}
+      {/* Fixed header with form title, action buttons for save/preview/share */}
       <header className="flex items-center justify-between px-10 py-4 bg-white border-b sticky top-0 z-10">
         <div className="flex items-center gap-2">
+          {/* FormAI Logo */}
           <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold">
             F
           </div>
           <span className="font-bold text-gray-800">FormAI Builder</span>
         </div>
+
+        {/* Action Buttons */}
         <div className="flex items-center gap-3">
+          {/* Save Changes Button - Only shown in edit mode */}
           {!isPreview && (
             <Button
               onClick={handleSaveFormStructure}
@@ -225,6 +277,8 @@ const Formpage = ({ formData }) => {
               {isSaving ? "Saving..." : "Save Changes"}
             </Button>
           )}
+
+          {/* Preview/Exit Preview Toggle Button */}
           <Button
             variant={isPreview ? "default" : "outline"}
             className="rounded-full"
@@ -237,6 +291,8 @@ const Formpage = ({ formData }) => {
             )}
             {isPreview ? "Exit Preview" : "Live Preview"}
           </Button>
+
+          {/* Share Link Button */}
           <Button
             variant="outline"
             className="rounded-full"
@@ -252,7 +308,9 @@ const Formpage = ({ formData }) => {
         </div>
       </header>
 
+      {/* ===== MAIN CONTENT AREA ===== */}
       <div className="flex flex-1 p-6 gap-6 overflow-hidden">
+        {/* Left Sidebar - Field Controller (Edit Mode Only) */}
         {!isPreview && (
           <aside className="flex-[1.5] border bg-white p-6 h-full rounded-3xl shadow-sm">
             <h2 className="font-bold text-lg text-gray-800">Controller</h2>
@@ -263,6 +321,7 @@ const Formpage = ({ formData }) => {
               <p className="text-xs font-semibold text-gray-400 uppercase">
                 Status
               </p>
+              {/* Status indicator showing edit mode is ready */}
               <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded-lg">
                 <Check size={14} /> Ready to Edit
               </div>
@@ -270,19 +329,26 @@ const Formpage = ({ formData }) => {
           </aside>
         )}
 
+        {/* Main Form Display Area */}
+        {/* Expands to full width in preview mode, shared with sidebar in edit mode */}
         <main
           className={`flex flex-col transition-all duration-500 border bg-white rounded-3xl p-12 overflow-y-auto shadow-sm ${
             isPreview ? "flex-[10] max-w-4xl mx-auto" : "flex-[5]"
           }`}
         >
           <div className="max-w-2xl mx-auto w-full">
+            {/* Form Title */}
             <h1 className="font-black text-gray-900 text-4xl text-center mb-2 tracking-tight">
               {ai.title}
             </h1>
+            {/* Form Subheading */}
             <p className="text-gray-500 text-center mb-12">{ai.subheading}</p>
 
+            {/* ===== FORM FIELDS ===== */}
             <form className="space-y-8" onSubmit={handleSubmitResponse}>
+              {/* Render each field dynamically */}
               {fields.map((field, index) => {
+                // Extract field properties with fallbacks for different naming conventions
                 const fLabel =
                   field.label ||
                   field.formLabel ||
@@ -301,10 +367,12 @@ const Formpage = ({ formData }) => {
                     className="flex items-end gap-4 w-full group relative"
                   >
                     <div className="flex-1">
+                      {/* Field Label */}
                       <label className="block text-xs font-bold uppercase text-gray-400 mb-2 ml-1">
                         {fLabel}
                       </label>
 
+                      {/* Render textarea for long-form fields */}
                       {fType === "textarea" ? (
                         <textarea
                           placeholder={fPlaceholder}
@@ -321,6 +389,7 @@ const Formpage = ({ formData }) => {
                           disabled={!isPreview}
                         />
                       ) : (
+                        /* Render input field for single-line fields */
                         <input
                           type={fType}
                           placeholder={fPlaceholder}
@@ -339,12 +408,15 @@ const Formpage = ({ formData }) => {
                       )}
                     </div>
 
+                    {/* ===== FIELD ACTION BUTTONS (Edit Mode Only) ===== */}
                     {!isPreview && (
                       <div className="flex gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white border p-1 rounded-full shadow-sm">
+                        {/* Edit Field Button */}
                         <EditFieldController
                           field={field}
                           onUpdate={(data) => handleFinalUpdate(index, data)}
                         />
+                        {/* Delete Field Button */}
                         <button
                           onClick={() => deleteField(index)}
                           type="button"
@@ -358,6 +430,8 @@ const Formpage = ({ formData }) => {
                 );
               })}
 
+              {/* ===== SUBMIT BUTTON ===== */}
+              {/* Only shown in preview mode when form has fields */}
               {isPreview && fields.length > 0 && (
                 <Button
                   type="submit"
